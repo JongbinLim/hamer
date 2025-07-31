@@ -152,3 +152,18 @@ dmypy.json
 /data/
 
 *.zip
+
+pytorch3d
+sam_hq
+lang_segment_anything
+hand_recon
+co-tracker
+queries.mp4
+result.json
+sam_demo.py
+sam_mask/
+screen.mp4
+sparse_pc.ply
+temp_grid.py
+tracker_demo.py
+view1.mp4

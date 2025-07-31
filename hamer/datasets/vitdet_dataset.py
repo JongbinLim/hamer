@@ -20,6 +20,7 @@ class ViTDetDataset(torch.utils.data.Dataset):
                  img_cv2: np.array,
                  boxes: np.array,
                  right: np.array,
+                 keyp_scores: np.array,
                  rescale_factor=2.5,
                  train: bool = False,
                  **kwargs):
@@ -35,6 +36,7 @@ class ViTDetDataset(torch.utils.data.Dataset):
         self.std = 255. * np.array(self.cfg.MODEL.IMAGE_STD)
 
         # Preprocess annotations
+        self.keyp_scores = keyp_scores.astype(np.float32)
         boxes = boxes.astype(np.float32)
         self.center = (boxes[:, 2:4] + boxes[:, 0:2]) / 2.0
         self.scale = rescale_factor * (boxes[:, 2:4] - boxes[:, 0:2]) / 200.0
@@ -65,7 +67,7 @@ class ViTDetDataset(torch.utils.data.Dataset):
         if True:
             # Blur image to avoid aliasing artifacts
             downsampling_factor = ((bbox_size*1.0) / patch_width)
-            print(f'{downsampling_factor=}')
+            # print(f'{downsampling_factor=}')
             downsampling_factor = downsampling_factor / 2.0
             if downsampling_factor > 1.1:
                 cvimg  = gaussian(cvimg, sigma=(downsampling_factor-1)/2, channel_axis=2, preserve_range=True)
@@ -92,4 +94,5 @@ class ViTDetDataset(torch.utils.data.Dataset):
         item['box_size'] = bbox_size
         item['img_size'] = 1.0 * np.array([cvimg.shape[1], cvimg.shape[0]])
         item['right'] = self.right[idx].copy()
+        item['keyp_scores'] = self.keyp_scores[idx].copy()
         return item

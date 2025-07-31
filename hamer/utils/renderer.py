@@ -8,6 +8,8 @@ import trimesh
 import cv2
 from yacs.config import CfgNode
 from typing import List, Optional
+import matplotlib.pyplot as plt
+from scipy.spatial.transform import Rotation as R
 
 def cam_crop_to_full(cam_bbox, box_center, box_size, img_size, focal_length=5000.):
     # Convert cam_bbox to full image
@@ -254,6 +256,7 @@ class Renderer:
         #     alphaMode='OPAQUE',
         #     baseColorFactor=(*mesh_base_color, 1.0))
         vertex_colors = np.array([(*mesh_base_color, 1.0)] * vertices.shape[0])
+
         if is_right:
             mesh = trimesh.Trimesh(vertices.copy() + camera_translation, self.faces.copy(), vertex_colors=vertex_colors)
         else:
@@ -342,11 +345,12 @@ class Renderer:
             render_res=[256, 256],
             focal_length=None,
             is_right=None,
+            pred_keypoints_3d=None,
         ):
-
+        # print("render nums:", len(vertices))
         renderer = pyrender.OffscreenRenderer(viewport_width=render_res[0],
                                               viewport_height=render_res[1],
-                                              point_size=1.0)
+                                              point_size=5.0)
         # material = pyrender.MetallicRoughnessMaterial(
         #     metallicFactor=0.0,
         #     alphaMode='OPAQUE',
@@ -355,12 +359,14 @@ class Renderer:
         if is_right is None:
             is_right = [1 for _ in range(len(vertices))]
 
-        mesh_list = [pyrender.Mesh.from_trimesh(self.vertices_to_trimesh(vvv, ttt.copy(), mesh_base_color, rot_axis, rot_angle, is_right=sss)) for vvv,ttt,sss in zip(vertices, cam_t, is_right)]
-
+        # mesh_list = [pyrender.Mesh.from_trimesh(self.vertices_to_trimesh(vvv, ttt.copy(), mesh_base_color, rot_axis, rot_angle, is_right=sss)) for vvv,ttt,sss in zip(vertices, cam_t, is_right)]
+        # print(vertices[0].shape)
+        # print(pred_keypoints_2d[0].shape)
         scene = pyrender.Scene(bg_color=[*scene_bg_color, 0.0],
                                ambient_light=(0.3, 0.3, 0.3))
-        for i,mesh in enumerate(mesh_list):
-            scene.add(mesh, f'mesh_{i}')
+
+        # for i,mesh in enumerate(mesh_list):
+        #     scene.add(mesh, f'mesh_{i}')
 
         camera_pose = np.eye(4)
         # camera_pose[:3, 3] = camera_translation
@@ -372,6 +378,30 @@ class Renderer:
         # Create camera node and add it to pyRender scene
         camera_node = pyrender.Node(camera=camera, matrix=camera_pose)
         scene.add_node(camera_node)
+        cam = camera
+        
+        K = np.eye(3)
+        K[0, 0] = focal_length
+        K[1, 1] = focal_length
+        K[0, 2] = camera_center[0]
+        K[1, 2] = camera_center[1]
+        
+        if pred_keypoints_3d is not None:
+            for i in range(pred_keypoints_3d.shape[0]):
+                num_points = pred_keypoints_3d[i].shape[0]
+                # colors = np.ones((pred_keypoints_3d[i].shape[0], 4)) * np.array([0.0, 1.0, 0.0, 1.0])
+
+                rot1 = R.from_rotvec(np.radians(rot_angle) * np.array(rot_axis)/np.linalg.norm(rot_axis)).as_matrix()
+                # pred_keypoints_3d[i][:, 2] *= -1
+                if is_right[i] == 0:
+                    pred_keypoints_3d[i][:, 0] = -pred_keypoints_3d[i][:, 0]
+                pred_keypoints_3d[i] = pred_keypoints_3d[i] + cam_t[i]
+                # rot2 = R.from_rotvec(np.radians(180) * np.array([1, 0, 0])/np.linalg.norm(np.array([1, 0, 0]))).as_matrix()
+
+                pred_keypoints_3d[i] = (rot1 @ pred_keypoints_3d[i].T).T
+                k_applied = (K @ pred_keypoints_3d[i].T).T
+                pred_keypoints_3d[i] = np.hstack((k_applied[:, :2] / k_applied[:, 2:], np.ones((num_points, 1))))
+        
         self.add_point_lighting(scene, camera_node)
         self.add_lighting(scene, camera_node)
 
@@ -383,7 +413,7 @@ class Renderer:
         color = color.astype(np.float32) / 255.0
         renderer.delete()
 
-        return color
+        return color, pred_keypoints_3d
 
     def add_lighting(self, scene, cam_node, color=np.ones(3), intensity=1.0):
         # from phalp.visualize.py_renderer import get_light_poses

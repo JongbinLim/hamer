@@ -49,6 +49,7 @@ class HAMER(pl.LightningModule):
 
         # Instantiate MANO model
         mano_cfg = {k.lower(): v for k,v in dict(cfg.MANO).items()}
+        # print(dict(cfg.MANO))
         self.mano = MANO(**mano_cfg)
 
         # Buffer that shows whetheer we need to initialize ActNorm layers
@@ -99,12 +100,16 @@ class HAMER(pl.LightningModule):
         # Use RGB image as input
         x = batch['img']
         batch_size = x.shape[0]
+        # print("batch_size: " +  str(batch_size))
 
         # Compute conditioning features using the backbone
         # if using ViT backbone, we need to use a different aspect ratio
         conditioning_feats = self.backbone(x[:,:,:,32:-32])
 
         pred_mano_params, pred_cam, _ = self.mano_head(conditioning_feats)
+        # print(pred_mano_params["global_orient"].shape)
+        # print(pred_mano_params["hand_pose"].shape)
+        # print(pred_mano_params["betas"].shape)
 
         # Store useful regression outputs to the output dict
         output = {}
@@ -137,6 +142,7 @@ class HAMER(pl.LightningModule):
                                                    focal_length=focal_length / self.cfg.MODEL.IMAGE_SIZE)
 
         output['pred_keypoints_2d'] = pred_keypoints_2d.reshape(batch_size, -1, 2)
+        output['keyp_scores'] = batch['keyp_scores']
         return output
 
     def compute_loss(self, batch: Dict, output: Dict, train: bool = True) -> torch.Tensor:
